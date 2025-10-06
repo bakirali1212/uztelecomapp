@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions
 from django.contrib.auth import get_user_model
 from .serializers import UserSerializer, RegisterSerializer, ChangePasswordSerializer
+from rest_framework.parsers import MultiPartParser, FormParser   # MUHIM
 
 from .models import User, GetStarted, Xizmatlar, XizmatVariant, XizmatAriza, Qurilma
 from .serializers import (
@@ -195,6 +196,8 @@ class XizmatArizaRetrieveUpdateDeleteAPIView(generics.RetrieveUpdateDestroyAPIVi
 # Qurilma CRUD (nested images)
 # =======================
 class QurilmaListCreateAPIView(APIView):
+    parser_classes = [MultiPartParser, FormParser]  # <— multipartni ochamiz
+
     def get(self, request):
         items = Qurilma.objects.all()
         serializer = QurilmaSerializer(items, many=True, context={'request': request})
@@ -203,11 +206,13 @@ class QurilmaListCreateAPIView(APIView):
     def post(self, request):
         serializer = QurilmaSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        serializer.save()  # serializer.create() ichida request.FILES dan rasm oladi
+        serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class QurilmaRetrieveUpdateDeleteAPIView(APIView):
+    parser_classes = [MultiPartParser, FormParser]  # <— multipartni ochamiz
+
     def get_object(self, pk):
         return get_object_or_404(Qurilma, pk=pk)
 
@@ -218,9 +223,17 @@ class QurilmaRetrieveUpdateDeleteAPIView(APIView):
 
     def put(self, request, pk):
         item = self.get_object(pk)
-        serializer = QurilmaSerializer(item, data=request.data, context={'request': request})
+        # PUT uchun ham partial=True beramiz — tarjima maydonlari majburiy bo‘lib ketmasin
+        serializer = QurilmaSerializer(item, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        serializer.save()  # serializer.update() ichida request.FILES dan rasm oladi
+        serializer.save()
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        item = self.get_object(pk)
+        serializer = QurilmaSerializer(item, data=request.data, partial=True, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(serializer.data)
 
     def delete(self, request, pk):

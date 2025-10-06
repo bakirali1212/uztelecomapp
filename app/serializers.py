@@ -203,10 +203,8 @@ class QurilmaImageSerializer(serializers.ModelSerializer):
         fields = ("id", "image", "created_at", "updated_at")
 
 
-# =======================
-# Qurilma Serializer
-# =======================
 class QurilmaSerializer(serializers.ModelSerializer):
+    # ixtiyoriy tarjima maydonlari
     name_uz = serializers.CharField(required=False, allow_blank=True)
     name_ru = serializers.CharField(required=False, allow_blank=True)
     name_en = serializers.CharField(required=False, allow_blank=True)
@@ -214,10 +212,14 @@ class QurilmaSerializer(serializers.ModelSerializer):
     desc_ru = serializers.CharField(required=False, allow_blank=True)
     desc_en = serializers.CharField(required=False, allow_blank=True)
 
+    # o‘qishda qulay ko‘rinish
     name = serializers.SerializerMethodField(read_only=True)
     desc = serializers.SerializerMethodField(read_only=True)
+
     narxi = serializers.DecimalField(max_digits=12, decimal_places=2, required=True)
-    images = QurilmaImageSerializer(many=True, required=False)
+
+    # MUHIM: read_only=True — rasmlarni create/update da biz o‘zimiz yozamiz
+    images = QurilmaImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Qurilma
@@ -271,6 +273,41 @@ class QurilmaSerializer(serializers.ModelSerializer):
             val = getattr(obj, "desc_uz", None)
         return val
 
+    # === YANGI: rasmlarni request.FILES dan yozamiz ===
+    def _iter_incoming_files(self):
+        req = self.context.get("request")
+        if not req:
+            return []
+
+        files = []
+        # Ko‘p fayl — ikkala nomni ham qo‘llab-quvvatlaymiz
+        files.extend(req.FILES.getlist("images"))   # <input name="images" multiple>
+        files.extend(req.FILES.getlist("image"))    # formData.append("image", file) ko‘p marta
+
+        # Yagona fayl bo‘lsa (fallback)
+        single = req.FILES.get("image")
+        if single and single not in files:
+            files.append(single)
+
+        return files
+
+
+    def create(self, validated_data):
+        obj = Qurilma.objects.create(**validated_data)
+        for f in self._iter_incoming_files():
+            QurilmaImage.objects.create(qurilma=obj, image=f)
+        return obj
+
+    def update(self, instance, validated_data):
+        # partial update
+        for k, v in validated_data.items():
+            setattr(instance, k, v)
+        instance.save()
+
+        # yangi rasmlarni qo‘shish (eski rasmlarni o‘chirib yubormaymiz)
+        for f in self._iter_incoming_files():
+            QurilmaImage.objects.create(qurilma=instance, image=f)
+        return instance
 
 # =======================
 # Duplicate UserSerializer (full)
